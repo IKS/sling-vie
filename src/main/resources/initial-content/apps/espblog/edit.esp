@@ -1,0 +1,177 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
+
+<% 
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+%>
+
+<html version="HTML+RDFa 1.0"
+    xmlns:sioc="http://rdfs.org/sioc/ns#" 
+    xmlns:dcterms="http://purl.org/dc/terms/">
+
+<%
+// Check if we have a currentNode
+var currentNodeProvided = ((typeof currentNode != "undefined") && currentNode.title != null); 
+function getCurrentNodeValue(prop) {
+    var result = "";
+    if(currentNodeProvided && currentNode[prop]) {
+        result = currentNode[prop];
+    }
+    return result;
+}
+
+// Compute path to used for the POST request, different
+// depending on existence of a current node or not
+var postPath = null;
+var pageTitle = null;
+var articleUri = null;
+//TODO handle https 
+var baseUri = "http://"+request.getServerName()
+if (request.getServerPort() != 80) {
+	baseUri = baseUri+":"+request.getServerPort()
+}
+if(currentNodeProvided) {
+    postPath = currentNode.getPath();
+    articleUri = baseUri + currentNode.getPath()
+    pageTitle = "Vie: "+currentNode.title;
+} else {
+    postPath = request.getContextPath() + "";
+    if(postPath.length > 0) {
+        postPath += "/";
+    }
+    postPath += request.getPathInfo();
+    articleUri = baseUri + "/new-post"
+    pageTitle = "New post";
+}
+%>
+	<head>
+		<link rel="stylesheet" href="/apps/espblog/espblog.css" type="text/css" media="screen" charset="utf-8">		
+		<title><%= pageTitle %></title>
+		<script src="https://ajax.googleapis.com/ajax/libs/jquery/1.4.2/jquery.min.js"></script>
+		<script src="/apps/espblog/vie/underscore-min.js"></script>
+		<script src="/apps/espblog/vie/backbone-min.js"></script>
+		<script src="/apps/espblog/vie/vie.js"></script>
+		<script src="/apps/espblog/vie/vie-wymeditor.js"></script>
+		<script src="/apps/espblog/vie/vie-containermanager.js"></script>
+		<script src="/apps/espblog/vie/wymeditor/jquery.wymeditor.js"></script>
+		<script>
+            jQuery(document).ready(function() {
+
+                // Implement our own Backbone.sync method
+                Backbone.sync = function(method, model, options) {
+                	console.log(method, JSON.stringify(model));
+                	//for now we simply put the content to a hidden field
+                	jQuery('#posttext').val(model.get("sioc:content"))
+                };
+
+                // Load all RDFa entities into VIE
+                VIE.RDFaEntities.getInstances();
+                // Make all RDFa entities editable
+                jQuery('[typeof][about]').each(function() {
+                    jQuery(this).vieWymeditor();
+                });
+
+                jQuery('.hform').submit(function() {
+                    
+                    // Update the dom
+                    for (var wi = 0, wl = WYMeditor.INSTANCES.length; wi<wl; wi++) {
+                        $(WYMeditor.INSTANCES[wi]._element[0]).html( WYMeditor.INSTANCES[wi].xhtml() );
+                    }
+                    
+                    // Go through all Backbone model instances loaded for the page
+                    jQuery.each(VIE.ContainerManager.instances, function(index, objectInstance) {
+                        var modifiedProperties = {};
+
+                        // Go through editables of the model instance
+                        jQuery.each(objectInstance.editables, function(propertyName, editableInstance) {
+                            // We dont have a "isModified" method...
+                            // Copy editable contents to the modifiedProperties object
+                            modifiedProperties[propertyName] = editableInstance.xhtml();
+                        });
+
+                        if (jQuery.isEmptyObject(modifiedProperties))
+                        {
+                            // No modified editables for this object, skip
+                            return true;
+                        }
+
+                        // Set the modified properties to the model instance
+                        objectInstance.set(modifiedProperties);
+                        objectInstance.save(null);
+                    });
+                });
+            });
+        </script>
+	</head>
+	<body>
+		
+		<div class="title">
+		  <div class="logo">
+		    <a href="http://sling.apache.org">
+		      <img border="0" src="/apps/espblog/sling-logo.png"/>
+		    </a>
+		  </div>
+		  <div class="logo-vie">
+		    <a href="http://wiki.iks-project.eu/index.php/VIE">
+		      <img border="0" src="/apps/espblog/vie/vie_logo_100.png"/>
+		    </a>
+		  </div>
+		  
+		</div>
+		
+		<div class="menu">
+			<%
+			load("menu.esp");
+			%>
+       </div>
+       
+       <div class="main">
+            <h1><%= pageTitle %></h1>
+			
+            <p>
+                Note that you need to <a href="?sling:authRequestLogin=1">login</a> 
+                before creating or editing a post.
+            </p> 
+					
+			<form class="hform" method="POST" action="<%= postPath %>" enctype="multipart/form-data">	    
+					<p><label>Title</label>
+					<input name="title" id="title" type="text" size="80" value="<%= getCurrentNodeValue("title") %>"></p>
+					<% //there seems to be a problem with empty text
+					var posttext = getCurrentNodeValue("posttext")
+					if (posttext == "") {
+						posttext = " "
+					}
+					%>
+					<div id="myarticle" typeof="http://rdfs.org/sioc/ns#Post" 
+						about="<%=articleUri %>">
+				        <!-- <h1 property="dcterms:title"><%= getCurrentNodeValue("title") %></h1> -->
+				        <div property="sioc:content"><%=  posttext %></div>
+				    </div>
+					
+					<input name="posttext" id="posttext" type="hidden" size="80" value="<%= posttext %>">
+					
+					<p><label>File</label><input type="file" name="attachments/*"/></p>
+
+					
+					<input type="hidden" name="created"/> 
+					<input name=":redirect" type="hidden" value="/content/espblog/posts.admin.html"/> 
+												
+				<input type="submit" value="Post" class="button">
+			</form>
+		</div>					
+	</body>
+</html>
