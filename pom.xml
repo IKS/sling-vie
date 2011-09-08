@@ -24,7 +24,8 @@
     <packaging>bundle</packaging>
     <version>1.0-SNAPSHOT</version>
     <name>sling-vie</name>
-    <description>Using VIE to edit contents in Sling. Currently just a modified espblog using vie instead of TextArea.</description>
+    <description>Using VIE to edit contents in Sling.</description>
+	<!-- Currently just a modified espblog using vie instead of TextArea. -->
     <build>
         <plugins>
             <plugin>
